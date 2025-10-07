@@ -1,0 +1,25 @@
+project_id = "twiskegjyoyeswyegjfh"
+
+[functions.send-prompt]
+verify_jwt = true
+
+[functions.generate-conversation-name]
+verify_jwt = true
+
+[functions.send-share-notification]
+verify_jwt = true
+
+[functions.save-document]
+verify_jwt = true
+
+[functions.save-document-manual]
+verify_jwt = true
+
+[functions.generate-prompt-inspiration]
+verify_jwt = false
+
+[functions.send-file-upload]
+verify_jwt = true
+
+[functions.send-feedback]
+verify_jwt = true

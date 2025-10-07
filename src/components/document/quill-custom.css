@@ -1,0 +1,95 @@
+/* Custom styles for Quill editor to match design system */
+.ql-toolbar.ql-snow {
+  border: none !important;
+  border-bottom: 1px solid hsl(var(--border)) !important;
+  padding: 8px !important;
+  background: hsl(var(--background));
+}
+
+.ql-container.ql-snow {
+  border: none !important;
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.ql-editor {
+  padding: 24px !important;
+  min-height: 400px;
+}
+
+.ql-editor h1 {
+  font-family: var(--font-serif);
+  font-size: 2em;
+  font-weight: bold;
+  margin-bottom: 0.5em;
+}
+
+.ql-editor h2 {
+  font-family: var(--font-serif);
+  font-size: 1.5em;
+  font-weight: bold;
+  margin-bottom: 0.4em;
+  margin-top: 1em;
+}
+
+.ql-editor h3 {
+  font-family: var(--font-serif);
+  font-size: 1.25em;
+  font-weight: 600;
+  margin-bottom: 0.3em;
+}
+
+.ql-editor p {
+  margin-bottom: 1em;
+  line-height: 1.6;
+}
+
+.ql-editor ul,
+.ql-editor ol {
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.ql-editor li {
+  margin-bottom: 0.3em;
+}
+
+.ql-toolbar .ql-stroke {
+  stroke: hsl(var(--foreground));
+}
+
+.ql-toolbar .ql-fill {
+  fill: hsl(var(--foreground));
+}
+
+.ql-toolbar button:hover,
+.ql-toolbar button:focus {
+  color: hsl(var(--primary));
+}
+
+.ql-toolbar button:hover .ql-stroke,
+.ql-toolbar button:focus .ql-stroke {
+  stroke: hsl(var(--primary));
+}
+
+.ql-toolbar button:hover .ql-fill,
+.ql-toolbar button:focus .ql-fill {
+  fill: hsl(var(--primary));
+}
+
+.ql-toolbar button.ql-active {
+  color: hsl(var(--primary));
+}
+
+.ql-toolbar button.ql-active .ql-stroke {
+  stroke: hsl(var(--primary));
+}
+
+.ql-toolbar button.ql-active .ql-fill {
+  fill: hsl(var(--primary));
+}
+
+.ql-editor.ql-blank::before {
+  color: hsl(var(--muted-foreground));
+  font-style: normal;
+}
