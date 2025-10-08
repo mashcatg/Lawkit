@@ -97,13 +97,17 @@ export function PromptBox({
       if (error) throw error;
 
       if (data?.suggestions && Array.isArray(data.suggestions)) {
-        // Clean up suggestions: remove quotes and trailing commas
-        const cleanedSuggestions = data.suggestions.map((s: string) => 
-          s.trim().replace(/^["'""'']|["'""'']$/g, '').replace(/,$/, '')
-        );
-        setSuggestions(cleanedSuggestions);
-        setShowSuggestions(true);
-      }
+      const cleanedSuggestions = data.suggestions.map((s: string) =>
+        s
+          .trim()
+          .replace(/^[“”"']+|[“”"']+$/g, '')
+          .replace(/[.,;]+$/g, '')
+      );
+
+      setSuggestions(cleanedSuggestions);
+      setShowSuggestions(true);
+    }
+
     } catch (error) {
       console.error("Error generating suggestions:", error);
     } finally {
@@ -128,10 +132,10 @@ export function PromptBox({
       {/* Context Chip */}
       {context && (
         <div className="flex gap-2 mb-2 px-2">
-          <div className="flex items-center gap-1.5 bg-primary/10 rounded-full px-3 py-1.5 text-sm">
+          <div className="flex items-center gap-1.5 bg-accent rounded-full px-3 py-1.5 text-sm">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             <span className="text-xs text-primary truncate max-w-60">
-              Context: {context.substring(0, 60)}...
+              {context.substring(0, 30)}...
             </span>
             {onContextRemove && (
               <button
@@ -274,7 +278,7 @@ export function PromptBox({
             </PopoverTrigger>
             <PopoverContent className="w-80 p-3" align="end" side="top">
               <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground mb-2">
+                <p className="text-sm font-medium text-muted-foreground mb-1 ml-2 mt-2">
                   Suggested prompts:
                 </p>
                 {suggestions.map((suggestion, index) => (
@@ -284,7 +288,7 @@ export function PromptBox({
                       onChange(suggestion);
                       setShowSuggestions(false);
                     }}
-                    className="w-full text-left p-2 rounded-lg border border-border hover:bg-accent transition-colors text-sm"
+                    className="w-full text-left px-4 py-3 rounded-full border border-muted hover:bg-accent transition-colors text-xs text-primary"
                   >
                     {suggestion}
                   </button>

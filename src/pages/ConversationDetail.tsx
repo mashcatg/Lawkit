@@ -173,7 +173,7 @@ const ConversationDetailContent = () => {
       setSelectedDocId(docId);
     }
     // Prepend context visibly in the prompt box
-    const contextPrefix = `Context: ${context}\n\nQuestion: `;
+    const contextPrefix = ``;
     setPromptValue(contextPrefix);
   };
 
@@ -181,9 +181,7 @@ const ConversationDetailContent = () => {
     if (!promptValue.trim() || !conversationId || !user) return;
 
     // Prepend context to prompt if present
-    const finalPrompt = promptContext 
-      ? `Context: ${promptContext}\n\nQuestion: ${promptValue}`
-      : promptValue;
+    const finalPrompt = promptValue;
     
     const userPrompt = finalPrompt;
     const originalUserPrompt = promptValue;

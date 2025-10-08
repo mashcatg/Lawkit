@@ -275,7 +275,7 @@ export function ExportModal({
             <div className="flex gap-2">
               <Button
                 variant="outline"
-                className="flex-1 flex flex-col items-center justify-center h-20 rounded-2xl"
+                className="flex-1 flex flex-col items-center justify-center h-20 rounded-2xl border-muted"
                 onClick={() => handleExport("docx")}
               >
                 <FileDown className="h-5 w-5 mb-2" />
@@ -283,7 +283,7 @@ export function ExportModal({
               </Button>
               <Button
                 variant="outline"
-                className="flex-1 flex flex-col items-center justify-center h-20 rounded-2xl"
+                className="flex-1 flex flex-col items-center justify-center h-20 rounded-2xl  border-muted"
                 onClick={() => handleExport("pdf")}
               >
                 <FileText className="h-5 w-5 mb-2" />

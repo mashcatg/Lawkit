@@ -7,7 +7,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-
+import { SpeedInsights } from "@vercel/speed-insights/next"
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -84,13 +84,6 @@ const Login = () => {
       {/* Left Side - Form */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/")}
-            className="mb-8 rounded-full"
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back
-          </Button>
 
           <div className="mb-8">
             <h1 className="text-4xl font-serif font-bold mb-2">

@@ -70,11 +70,11 @@ const ConversationItem = memo(({ conversation, onDelete }: { conversation: Conve
             <div className="flex-1 min-w-0">
               <div className="font-medium truncate text-sm">{conversation.title}</div>
               {conversation.last_message && (
-                <div className="text-xs text-muted-foreground truncate">
+                <div className={`text-xs truncate text-shadow-color`}>
                   {conversation.last_message}
                 </div>
               )}
-              <div className="text-xs text-muted-foreground mt-0.5">{timeAgo}</div>
+              <div className={`text-xs mt-0.5 ${isActive ? 'text-shadow-color':'text-muted hover:text-shadow-color'}`}>{timeAgo}</div>
             </div>
           )}
         </SidebarMenuButton>
