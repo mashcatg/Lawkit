@@ -7,7 +7,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { SpeedInsights } from "@vercel/speed-insights/next"
+
 const Login = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();

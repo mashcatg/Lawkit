@@ -16,12 +16,13 @@ import SharedPublic from "./pages/SharedPublic";
 import Profile from "./pages/Profile";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
-
+import { SpeedInsights } from "@vercel/speed-insights/next"
 const queryClient = new QueryClient();
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <SpeedInsights/>
       <AuthProvider>
         <TooltipProvider>
           <Toaster />
