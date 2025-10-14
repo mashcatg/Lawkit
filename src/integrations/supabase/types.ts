@@ -124,6 +124,47 @@ export type Database = {
         }
         Relationships: []
       }
+      document_versions: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          created_by: string
+          doc_content: string
+          doc_title: string | null
+          document_id: string
+          id: string
+          version_number: number
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          created_by: string
+          doc_content: string
+          doc_title?: string | null
+          document_id: string
+          id?: string
+          version_number: number
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          created_by?: string
+          doc_content?: string
+          doc_title?: string | null
+          document_id?: string
+          id?: string
+          version_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_versions_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       documents: {
         Row: {
           conversation_id: string

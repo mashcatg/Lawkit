@@ -36,7 +36,7 @@ const NewConversation = () => {
         name: file.name,
         file,
       }));
-      setUploadedFiles([...uploadedFiles, ...newFiles]);
+      setUploadedFiles(prev => [...prev, ...newFiles]);
       
       // Start file processing timer
       if (newFiles.length > 0) {
@@ -100,7 +100,14 @@ const NewConversation = () => {
           .eq('id', conversation.id);
       }
 
-      navigate(`/conversation/${conversation.id}`);
+      // Navigate with document data if present
+      navigate(`/conversation/${conversation.id}`, {
+        state: {
+          docId: data.docId,
+          docContent: data.docContent,
+          docTitle: data.docTitle
+        }
+      });
     } catch (error) {
       console.error('Error submitting prompt:', error);
       toast({ description: "Failed to process your request", variant: "destructive" });

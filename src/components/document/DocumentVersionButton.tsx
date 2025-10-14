@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 interface DocumentVersionButtonProps {
   fileName: string;
   lastUpdate: string;
-  version: string;
+  versionCount: number;
   onClick: () => void;
   isVisible: boolean;
 }
@@ -12,7 +12,7 @@ interface DocumentVersionButtonProps {
 export function DocumentVersionButton({
   fileName,
   lastUpdate,
-  version,
+  versionCount,
   onClick,
   isVisible,
 }: DocumentVersionButtonProps) {
@@ -30,7 +30,7 @@ export function DocumentVersionButton({
         <div className="flex-1 text-left min-w-0">
           <p className="font-medium text-sm truncate">{fileName}</p>
           <div className="text-xs text-muted-foreground mt-0.5">
-            {lastUpdate} <span className="mx-1">•</span> {version}
+            {lastUpdate} <span className="mx-1">•</span> {versionCount} {versionCount === 1 ? 'version' : 'versions'}
           </div>
         </div>
       </div>

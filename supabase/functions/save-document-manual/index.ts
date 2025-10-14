@@ -80,26 +80,82 @@ serve(async (req) => {
       cleanedContent = docContent.replace(titlePattern, '').trim();
     }
 
-    // Save to database (UPSERT logic)
-    const { error: dbError } = await supabase
+    // Check if document exists
+    const { data: existingDoc } = await supabase
       .from('documents')
-      .upsert({
-        doc_id: docId,
-        doc_title: docTitle,
-        doc_content: cleanedContent,
-        conversation_id: conversationId,
-        user_id: userId,
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'doc_id,conversation_id'
-      });
+      .select('doc_id')
+      .eq('doc_id', docId)
+      .eq('conversation_id', conversationId)
+      .maybeSingle();
 
-    if (dbError) {
-      console.error('Database save error:', dbError);
-      return new Response(
-        JSON.stringify({ error: 'Failed to save to database', details: dbError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (existingDoc) {
+      // Update existing document (don't update doc_title)
+      const { error: dbError } = await supabase
+        .from('documents')
+        .update({
+          doc_content: cleanedContent,
+          updated_at: new Date().toISOString()
+        })
+        .eq('doc_id', docId)
+        .eq('conversation_id', conversationId);
+
+      if (dbError) {
+        console.error('Database save error:', dbError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to save to database', details: dbError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Insert new document (include doc_title)
+      const { error: dbError } = await supabase
+        .from('documents')
+        .insert({
+          doc_id: docId,
+          doc_title: docTitle,
+          doc_content: cleanedContent,
+          conversation_id: conversationId,
+          user_id: userId,
+          updated_at: new Date().toISOString()
+        });
+
+      if (dbError) {
+        console.error('Database save error:', dbError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to save to database', details: dbError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+    
+    // Save document version
+    try {
+      // Get the latest version number for this document
+      const { data: latestVersion } = await supabase
+        .from('document_versions')
+        .select('version_number')
+        .eq('document_id', docId)
+        .order('version_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const newVersionNumber = (latestVersion?.version_number || 0) + 1;
+      
+      // Save new version
+      await supabase
+        .from('document_versions')
+        .insert({
+          document_id: docId,
+          conversation_id: conversationId,
+          version_number: newVersionNumber,
+          doc_content: cleanedContent,
+          doc_title: docTitle,
+          created_by: userId
+        });
+      
+      console.log(`Saved version ${newVersionNumber} for document ${docId}`);
+    } catch (versionError) {
+      console.error('Error saving document version:', versionError);
     }
 
     return new Response(

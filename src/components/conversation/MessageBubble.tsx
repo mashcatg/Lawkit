@@ -22,6 +22,8 @@ interface Message {
   files?: string[];
   versions?: { content: string; timestamp: string }[];
   reactions?: { likes: number; dislikes: number; userReaction?: "like" | "dislike" };
+  context?: string;
+  contextDocId?: string;
 }
 
 interface MessageBubbleProps {
@@ -151,6 +153,17 @@ export function MessageBubble({
           </div>
         ) : (
           <>
+            {/* Context Badge for User Messages */}
+            {isUser && message.context && (
+              <div className="context-badge mb-2">
+                <span className="text-xs">
+                  {message.context.length > 100 
+                    ? `${message.context.substring(0, 100)}...` 
+                    : message.context}
+                </span>
+              </div>
+            )}
+            
             {/* Message Text */}
             <div className="text-sm whitespace-pre-wrap text-foreground">{formatContent(displayContent)}</div>
 
@@ -182,9 +195,9 @@ export function MessageBubble({
             {showDocumentButton && onDocumentClick && (
               <div className="mt-4">
                 <DocumentVersionButton
-                  fileName="NDA_Contract.pdf"
-                  lastUpdate="Updated 2 hours ago"
-                  version="Version 3"
+                  fileName={docTitle || 'Generated Document'}
+                  lastUpdate="Updated recently"
+                  versionCount={1}
                   onClick={onDocumentClick}
                   isVisible={true}
                 />

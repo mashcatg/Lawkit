@@ -1,0 +1,35 @@
+/* Diff highlighting styles for version comparison */
+ins {
+  background-color: hsl(var(--success) / 0.2);
+  text-decoration: none;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+del {
+  background-color: hsl(var(--destructive) / 0.2);
+  text-decoration: line-through;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+/* Side-by-side comparison highlighting */
+.diff-added {
+  background: hsl(var(--accent) / 0.3);
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 6px;
+  border-left: 3px solid hsl(var(--accent));
+  box-shadow: 0 2px 4px hsl(var(--accent) / 0.1);
+  display: block;
+}
+
+.diff-removed {
+  background: hsl(var(--destructive) / 0.3);
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 6px;
+  border-left: 3px solid hsl(var(--destructive));
+  box-shadow: 0 2px 4px hsl(var(--destructive) / 0.1);
+  display: block;
+}

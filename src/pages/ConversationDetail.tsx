@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { MessageBubble } from "@/components/conversation/MessageBubble";
@@ -28,6 +28,8 @@ interface DisplayMessage {
   docId?: string | null;
   docContent?: string | null;
   docTitle?: string | null;
+  context?: string;
+  contextDocId?: string;
 }
 
 const formatMessages = (msgs: any[]): DisplayMessage[] => {
@@ -44,22 +46,25 @@ const formatMessages = (msgs: any[]): DisplayMessage[] => {
 const parseMessageContent = (content: string) => {
   try {
     const parsed = JSON.parse(content);
-    if (parsed.text && parsed.docId) {
+    if (parsed.text) {
       return {
         text: parsed.text,
-        docId: parsed.docId,
-        docContent: parsed.docContent,
-        docTitle: parsed.docTitle
+        docId: parsed.docId || null,
+        docContent: parsed.docContent || null,
+        docTitle: parsed.docTitle || null,
+        context: parsed.context || undefined,
+        contextDocId: parsed.contextDocId || undefined
       };
     }
   } catch (e) {
     // Not JSON, return as-is
   }
-  return { text: content, docId: null, docContent: null, docTitle: null };
+  return { text: content, docId: null, docContent: null, docTitle: null, context: undefined, contextDocId: undefined };
 };
 
 const ConversationDetailContent = () => {
   const { id: conversationId } = useParams();
+  const location = useLocation();
   const { user } = useAuth();
   const { setOpen } = useSidebar();
 
@@ -82,20 +87,98 @@ const ConversationDetailContent = () => {
   const [selectedDocContent, setSelectedDocContent] = useState<string | null>(null);
   const [selectedDocTitle, setSelectedDocTitle] = useState<string | null>(null);
   const [promptContext, setPromptContext] = useState<string>("");
+  const [contextDocId, setContextDocId] = useState<string | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
   const [conversationDocuments, setConversationDocuments] = useState<Map<string, { doc_content: string; doc_title: string | null }>>(new Map());
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const prevConversationIdRef = useRef<string | null>(null);
 
-  // Close document viewer when conversation changes (NOW AFTER STATE IS DECLARED)
+  // Handle initial document from navigation state (first conversation)
   useEffect(() => {
-    setShowDocViewer(false);
-    setSelectedDocId(null);
-    setSelectedDocContent(null);
-    setSelectedDocTitle(null);
-    setSelectedFileUrl(null);
-    setSelectedFileName(null);
+    const fetchDocumentIfNeeded = async () => {
+      const state = location.state as any;
+      if (state?.docId) {
+        if (state.docContent) {
+          // We have content in state, use it
+          setSelectedDocId(state.docId);
+          setSelectedDocContent(state.docContent);
+          setSelectedDocTitle(state.docTitle || 'Generated Document');
+          setSelectedFileUrl(null);
+          setSelectedFileName(null);
+          setShowDocViewer(true);
+        } else if (conversationId && user) {
+          // We have docId but no content, fetch from DB
+          try {
+            const { data, error } = await supabase
+              .from('documents')
+              .select('doc_content, doc_title')
+              .eq('doc_id', state.docId)
+              .eq('conversation_id', conversationId)
+              .maybeSingle();
+            
+            if (!error && data) {
+              setSelectedDocId(state.docId);
+              setSelectedDocContent(data.doc_content);
+              setSelectedDocTitle(data.doc_title || 'Generated Document');
+              setSelectedFileUrl(null);
+              setSelectedFileName(null);
+              setShowDocViewer(true);
+            }
+          } catch (error) {
+            console.error('Error fetching document:', error);
+          }
+        }
+        
+        // Clear navigation state to prevent reopening on refresh
+        window.history.replaceState({}, document.title);
+      }
+    };
+    
+    fetchDocumentIfNeeded();
+  }, [location, conversationId, user]);
+
+  // Close document viewer only when conversation actually changes (not on reload)
+  useEffect(() => {
+    if (conversationId && prevConversationIdRef.current && prevConversationIdRef.current !== conversationId) {
+      setShowDocViewer(false);
+      setSelectedDocId(null);
+      setSelectedDocContent(null);
+      setSelectedDocTitle(null);
+      setSelectedFileUrl(null);
+      setSelectedFileName(null);
+      localStorage.removeItem('docViewerState');
+    }
+    prevConversationIdRef.current = conversationId;
   }, [conversationId]);
+
+  // Restore document viewer state on mount/reload
+  useEffect(() => {
+    if (!conversationId) return;
+    
+    const savedState = localStorage.getItem('docViewerState');
+    if (savedState) {
+      try {
+        const state = JSON.parse(savedState);
+        const isRecent = Date.now() - state.timestamp < 3600000; // 1 hour
+        
+        if (state.conversationId === conversationId && isRecent && state.isOpen) {
+          // Find the document in the conversation documents Map
+          const dbDocument = conversationDocuments.get(state.docId);
+          if (dbDocument) {
+            setSelectedDocId(state.docId);
+            setSelectedDocContent(dbDocument.doc_content);
+            setSelectedDocTitle(dbDocument.doc_title);
+            setSelectedFileUrl(null);
+            setSelectedFileName(null);
+            setShowDocViewer(true);
+          }
+        }
+      } catch (e) {
+        console.error('Error restoring doc viewer state:', e);
+      }
+    }
+  }, [conversationId, conversationDocuments]);
 
   // Load documents from database for this conversation
   useEffect(() => {
@@ -156,7 +239,7 @@ const ConversationDetailContent = () => {
         name: file.name,
         file,
       }));
-      setUploadedFiles([...uploadedFiles, ...newFiles]);
+      setUploadedFiles(prev => [...prev, ...newFiles]);
     } finally {
       setIsUploading(false);
     }
@@ -168,46 +251,51 @@ const ConversationDetailContent = () => {
 
   const handleContextSelect = (context: string, docId?: string) => {
     setPromptContext(context);
-    // Store the docId if provided
-    if (docId) {
-      setSelectedDocId(docId);
-    }
-    // Prepend context visibly in the prompt box
-    const contextPrefix = ``;
-    setPromptValue(contextPrefix);
+    setContextDocId(docId || null);
   };
 
   const handleSubmit = async () => {
     if (!promptValue.trim() || !conversationId || !user) return;
 
-    // Prepend context to prompt if present
-    const finalPrompt = promptValue;
-    
-    const userPrompt = finalPrompt;
-    const originalUserPrompt = promptValue;
+    const userPrompt = promptValue;
     const tempFiles = [...uploadedFiles];
+    const tempContext = promptContext;
+    const tempContextDocId = contextDocId;
     
-    // Create optimistic user message for instant display
+    // Create optimistic user message with context metadata
     const optimisticUserMessage: any = {
       id: `temp-${Date.now()}`,
       role: 'user' as const,
       content: userPrompt,
+      context: tempContext || undefined,
+      contextDocId: tempContextDocId || undefined,
       created_at: new Date().toISOString(),
       conversation_id: conversationId,
       files: []
     };
     
-    // Immediately show user message in UI
+    // Immediately show user message in UI and clear context
     setMessages([...messages, optimisticUserMessage]);
     setPromptValue("");
+    setPromptContext('');
+    setContextDocId(null);
     setIsLoading(true);
 
     try {
-      // Add to database
-      const userMessage = await addMessage(conversationId, 'user', userPrompt);
+      // Add to database - store as JSON if context exists
+      const userMessageContent = tempContext 
+        ? JSON.stringify({
+            text: userPrompt,
+            context: tempContext,
+            contextDocId: tempContextDocId
+          })
+        : userPrompt;
+      
+      const userMessage = await addMessage(conversationId, 'user', userMessageContent);
       if (!userMessage) {
         toast({ description: "Failed to send message", variant: "destructive" });
         setPromptValue(userPrompt);
+        setPromptContext(tempContext);
         setMessages(messages); // Revert optimistic update
         return;
       }
@@ -233,21 +321,25 @@ const ConversationDetailContent = () => {
         };
       });
 
-      // Get latest docId from database (not from message content)
-      let latestDocId: string | null = null;
-      try {
-        const { data: latestDoc } = await supabase
-          .from('documents')
-          .select('doc_id')
-          .eq('conversation_id', conversationId)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        latestDocId = latestDoc?.doc_id || null;
-      } catch (error) {
-        console.error('Error fetching latest doc_id:', error);
-      }
+      // Determine target docId: use selectedDocId if available, otherwise get latest from DB
+      const targetDocId = selectedDocId || (async () => {
+        try {
+          const { data: latestDoc } = await supabase
+            .from('documents')
+            .select('doc_id')
+            .eq('conversation_id', conversationId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          return latestDoc?.doc_id || null;
+        } catch (error) {
+          console.error('Error fetching latest doc_id:', error);
+          return null;
+        }
+      })();
+
+      const resolvedTargetDocId = typeof targetDocId === 'string' ? targetDocId : await targetDocId;
 
       const { data, error} = await supabase.functions.invoke('send-prompt', {
         body: {
@@ -257,10 +349,10 @@ const ConversationDetailContent = () => {
           userEmail: user.email || '',
           mode,
           deepResearch,
-          prompt: userPrompt, // This includes context prepended
-          originalPrompt: originalUserPrompt, // Original without context
-          context: promptContext || undefined,
-          docId: latestDocId,
+          prompt: userPrompt,
+          originalPrompt: userPrompt,
+          context: tempContext || undefined,
+          docId: resolvedTargetDocId,
           fileUrls,
           timestamp: new Date().toISOString()
         }
@@ -275,7 +367,7 @@ const ConversationDetailContent = () => {
       console.log('DocTitle:', data.docTitle);
 
       // Store the assistant's response with document metadata if present
-      const messageContent = data.docId && data.docContent 
+      const assistantMessageContent = data.docId && data.docContent 
         ? JSON.stringify({
             text: data.response,
             docId: data.docId,
@@ -284,27 +376,69 @@ const ConversationDetailContent = () => {
           })
         : data.response;
 
-      const assistantMessage = await addMessage(conversationId, 'assistant', messageContent);
+      const assistantMessage = await addMessage(conversationId, 'assistant', assistantMessageContent);
       
-      // Handle document if present - auto-open with validation
-      if (data.docId && data.docContent && typeof data.docContent === 'string' && data.docContent.trim() !== '') {
-        let title = 'Generated Document';
-        if (data.docTitle && typeof data.docTitle === 'string' && data.docTitle.trim() !== '') {
-          // Normalize title
-          title = data.docTitle.trim().replace(/^["'""'']|["'""'']$/g, '').replace(/,$/, '');
+      // Handle document if present - auto-open with validation or poll for content
+      if (data.docId) {
+        if (data.docContent && typeof data.docContent === 'string' && data.docContent.trim() !== '') {
+          // We have content immediately
+          let title = 'Generated Document';
+          if (data.docTitle && typeof data.docTitle === 'string' && data.docTitle.trim() !== '') {
+            title = data.docTitle.trim().replace(/^["'""'']|["'""'']$/g, '').replace(/,$/, '');
+          }
+          
+          setSelectedDocId(data.docId);
+          setSelectedDocContent(data.docContent);
+          setSelectedDocTitle(title);
+          setSelectedFileUrl(null);
+          setSelectedFileName(null);
+          setShowDocViewer(true);
+        } else {
+          // docId exists but no docContent returned, poll the database
+          let attempts = 0;
+          const maxAttempts = 5;
+          const pollInterval = 300;
+          
+          const pollForDocument = async () => {
+            while (attempts < maxAttempts) {
+              attempts++;
+              await new Promise(resolve => setTimeout(resolve, pollInterval));
+              
+              try {
+                const { data: docData, error: docError } = await supabase
+                  .from('documents')
+                  .select('doc_content, doc_title')
+                  .eq('doc_id', data.docId)
+                  .eq('conversation_id', conversationId)
+                  .maybeSingle();
+                
+                if (!docError && docData && docData.doc_content) {
+                  setSelectedDocId(data.docId);
+                  setSelectedDocContent(docData.doc_content);
+                  setSelectedDocTitle(docData.doc_title || 'Generated Document');
+                  setSelectedFileUrl(null);
+                  setSelectedFileName(null);
+                  setShowDocViewer(true);
+                  return;
+                }
+              } catch (pollError) {
+                console.error('Error polling for document:', pollError);
+              }
+            }
+            
+            // If we get here, polling failed
+            toast({
+              description: "Document was created but content couldn't be loaded. Try refreshing.",
+              variant: "destructive"
+            });
+          };
+          
+          pollForDocument();
         }
-        
-        setSelectedDocId(data.docId);
-        setSelectedDocContent(data.docContent);
-        setSelectedDocTitle(title);
-        setSelectedFileUrl(null);
-        setSelectedFileName(null);
-        setShowDocViewer(true);
       } else {
         setShowDocViewer(false);
       }
       
-      setPromptContext('');
       await loadMessages(); // Sync with DB
       setUploadedFiles([]);
     } catch (error) {
@@ -535,6 +669,7 @@ const ConversationDetailContent = () => {
       setSelectedDocId(null);
       setSelectedDocContent(null);
       setSelectedDocTitle(null);
+      localStorage.removeItem('docViewerState');
     } else {
       setSelectedDocId(docId);
       setSelectedDocContent(docContent);
@@ -542,6 +677,14 @@ const ConversationDetailContent = () => {
       setSelectedFileUrl(null);
       setSelectedFileName(null);
       setShowDocViewer(true);
+      
+      // Persist to localStorage
+      localStorage.setItem('docViewerState', JSON.stringify({
+        conversationId,
+        docId,
+        isOpen: true,
+        timestamp: Date.now()
+      }));
     }
   };
 
@@ -654,7 +797,12 @@ const ConversationDetailContent = () => {
                       return (
                         <MessageBubble 
                           key={message.id} 
-                          message={{ ...message, content: parsedContent.text }}
+                          message={{ 
+                            ...message, 
+                            content: parsedContent.text,
+                            context: parsedContent.context,
+                            contextDocId: parsedContent.contextDocId
+                          }}
                           showDocumentButton={false}
                           onDocumentClick={() => setShowDocViewer(!showDocViewer)}
                           onReaction={handleReaction}

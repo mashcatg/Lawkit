@@ -5,10 +5,18 @@ import "./quill-custom.css";
 import { Button } from "@/components/ui/button";
 import { Clock, ChevronRight, Sparkles, FileText, Save, Download } from "lucide-react";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from 'docx';
+import jsPDF from 'jspdf';
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { DocumentVersionModal } from "./DocumentVersionModal";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
 
 interface DocumentEditorProps {
   showDocViewer?: boolean;
@@ -37,17 +45,21 @@ export function DocumentEditor({
   const quillRef = useRef<ReactQuill>(null);
   const clientId = useRef(Math.random().toString(36).substring(7));
   const [content, setContent] = useState(docContent || "");
+  const [lastSavedContent, setLastSavedContent] = useState(docContent || "");
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [showVersions, setShowVersions] = useState(false);
+  const [showVersionModal, setShowVersionModal] = useState(false);
   const [selectedText, setSelectedText] = useState("");
   const [showAskLawkit, setShowAskLawkit] = useState(false);
   const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
   const [viewMode, setViewMode] = useState<'view' | 'edit'>(docContent ? 'edit' : 'view');
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [versionCount, setVersionCount] = useState<number>(0);
+  const saveTimeoutRef = useRef<NodeJS.Timeout>();
 
-  // Load document content when docContent changes
+  // Load document content and version count
   useEffect(() => {
-    // Validate docContent before using
     if (docContent && typeof docContent === 'string' && docContent.trim()) {
       setContent(docContent);
       setViewMode('edit');
@@ -57,7 +69,17 @@ export function DocumentEditor({
       setViewMode('view');
       setContent('');
     }
-  }, [docContent, fileUrl]);
+
+    // Load version count
+    if (docId && conversationId) {
+      supabase
+        .from('document_versions')
+        .select('id', { count: 'exact', head: true })
+        .eq('document_id', docId)
+        .eq('conversation_id', conversationId)
+        .then(({ count }) => setVersionCount(count || 0));
+    }
+  }, [docContent, fileUrl, docId, conversationId]);
 
   // Real-time collaboration
   useEffect(() => {
@@ -77,47 +99,19 @@ export function DocumentEditor({
     };
   }, [docId, user]);
 
-  // Auto-save with debounce
+  // Track unsaved changes
   useEffect(() => {
-    if (!docId || !conversationId || !user || viewMode !== 'edit' || content === docContent) return;
-    
-    const timeoutId = setTimeout(async () => {
-      try {
-        setIsSaving(true);
-        const { error } = await supabase.functions.invoke('save-document', {
-          body: {
-            docId,
-            docContent: content,
-            conversationId,
-            userId: user.id
-          }
-        });
+    setHasUnsavedChanges(content !== lastSavedContent);
+  }, [content, lastSavedContent]);
 
-        if (error) throw error;
-        
-        setLastSaved(new Date());
-        
-        // Broadcast to other clients
-        await supabase.channel(`doc-${docId}`).send({
-          type: 'broadcast',
-          event: 'doc_update',
-          payload: {
-            docId,
-            content,
-            userId: user.id,
-            clientId: clientId.current,
-            timestamp: Date.now()
-          }
-        });
-      } catch (error) {
-        console.error('Error saving document:', error);
-      } finally {
-        setIsSaving(false);
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
       }
-    }, 2000);
-
-    return () => clearTimeout(timeoutId);
-  }, [content, docId, conversationId, user, viewMode, docContent]);
+    };
+  }, []);
 
   // Handle text selection for "Ask Lawkit"
   const handleTextSelection = () => {
@@ -159,46 +153,73 @@ export function DocumentEditor({
   };
 
   const handleManualSave = async () => {
-    if (!docId || !content || !conversationId || !userId) {
-      toast({
-        title: "Save Failed",
-        description: "No document to save",
-        variant: "destructive",
-      });
+    if (!docId || !content || !conversationId || !userId || isSaving) {
+      if (!docId || !content) {
+        toast({
+          title: "Save Failed",
+          description: "No document to save",
+          variant: "destructive",
+        });
+      }
       return;
     }
 
-    try {
-      setIsSaving(true);
-      const { error } = await supabase.functions.invoke('save-document-manual', {
-        body: {
-          docId,
-          docContent: content,
-          conversationId,
-          userId
-        }
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Document Saved",
-        description: "Your changes have been saved successfully",
-      });
-      setLastSaved(new Date());
-    } catch (error) {
-      console.error('Error saving document manually:', error);
-      toast({
-        title: "Save Failed",
-        description: "Failed to save document. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSaving(false);
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
     }
+
+    // Debounce: Add 300ms delay
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        setIsSaving(true);
+        const { error } = await supabase.functions.invoke('save-document-manual', {
+          body: {
+            docId,
+            docContent: content,
+            conversationId,
+            userId
+          }
+        });
+
+        if (error) throw error;
+
+        // Refetch version count instead of incrementing
+        const { count } = await supabase
+          .from('document_versions')
+          .select('id', { count: 'exact', head: true })
+          .eq('document_id', docId)
+          .eq('conversation_id', conversationId);
+
+        setVersionCount(count || 0);
+        toast({
+          title: "Document Saved",
+          description: "Your changes have been saved successfully",
+        });
+        setLastSaved(new Date());
+        setLastSavedContent(content);
+        setHasUnsavedChanges(false);
+      } catch (error) {
+        console.error('Error saving document manually:', error);
+        toast({
+          title: "Save Failed",
+          description: "Failed to save document. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsSaving(false);
+      }
+    }, 300);
   };
 
-  const handleExport = async () => {
+  const handleRestore = async (restoredContent: string, restoredTitle: string | null) => {
+    setContent(restoredContent);
+    
+    // Save the restored content as a new version
+    await handleManualSave();
+  };
+
+  const handleExportDOCX = async () => {
     if (!content) {
       toast({
         description: "No content to export",
@@ -241,6 +262,57 @@ export function DocumentEditor({
 
       toast({
         description: "Document exported as DOCX successfully",
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        description: "Failed to export document",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleExportPDF = async () => {
+    if (!content) {
+      toast({
+        description: "No content to export",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = content;
+      const textContent = tempDiv.textContent || tempDiv.innerText || '';
+      
+      const pdf = new jsPDF();
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const margin = 15;
+      const maxWidth = pageWidth - (margin * 2);
+      
+      // Add title
+      pdf.setFontSize(16);
+      pdf.text(fileName || 'Document', margin, 20);
+      
+      // Add content
+      pdf.setFontSize(11);
+      const lines = pdf.splitTextToSize(textContent, maxWidth);
+      let yPosition = 35;
+      
+      lines.forEach((line: string) => {
+        if (yPosition > pdf.internal.pageSize.getHeight() - 20) {
+          pdf.addPage();
+          yPosition = 20;
+        }
+        pdf.text(line, margin, yPosition);
+        yPosition += 7;
+      });
+
+      pdf.save(`document-${docId || Date.now()}.pdf`);
+
+      toast({
+        description: "Document exported as PDF successfully",
       });
     } catch (error) {
       console.error('Export error:', error);
@@ -302,33 +374,44 @@ export function DocumentEditor({
           {viewMode === 'edit' && (
             <>
               <Button
-                variant={showVersions ? "default" : "ghost"}
+                variant={showVersionModal ? "default" : "ghost"}
                 size="sm"
                 className="rounded-full h-8"
-                onClick={() => setShowVersions(!showVersions)}
+                onClick={() => setShowVersionModal(true)}
               >
                 <Clock className="h-3.5 w-3.5 mr-2" />
-                Versions
+                Versions ({versionCount})
               </Button>
               <Button
                 variant="default"
                 size="sm"
                 className="rounded-full h-8"
                 onClick={handleManualSave}
-                disabled={isSaving || !docId}
+                disabled={isSaving || !docId || !hasUnsavedChanges}
               >
                 <Save className="h-3.5 w-3.5 mr-2" />
                 Save
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-full h-8"
-                onClick={handleExport}
-              >
-                <Download className="h-3.5 w-3.5 mr-2" />
-                Export
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full h-8"
+                  >
+                    <Download className="h-3.5 w-3.5 mr-2" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleExportPDF}>
+                    Export as PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportDOCX}>
+                    Export as DOCX
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
         </div>
@@ -422,28 +505,15 @@ export function DocumentEditor({
         )}
       </div>
 
-      {/* Version History Sidebar */}
-      {showVersions && viewMode === 'edit' && (
-        <div className="absolute right-0 top-0 bottom-0 w-64 bg-card border-l border-border p-4 overflow-y-auto">
-          <h3 className="font-semibold mb-4">Version History</h3>
-          <div className="space-y-3">
-            {[
-              { version: "Current", time: "10:45 AM", author: "AI Assistant" },
-              { version: "v2", time: "10:30 AM", author: "You" },
-              { version: "v1", time: "10:15 AM", author: "AI Assistant" },
-            ].map((v, i) => (
-              <button
-                key={i}
-                className="w-full text-left p-3 rounded-lg border border-border hover:bg-accent transition-colors"
-              >
-                <div className="font-medium text-sm">{v.version}</div>
-                <div className="text-xs text-muted-foreground mt-1">{v.time}</div>
-                <div className="text-xs text-muted-foreground">{v.author}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Version History Modal */}
+      <DocumentVersionModal
+        open={showVersionModal}
+        onOpenChange={setShowVersionModal}
+        documentId={docId}
+        conversationId={conversationId || undefined}
+        currentContent={content}
+        onRestore={handleRestore}
+      />
     </div>
   );
 }
